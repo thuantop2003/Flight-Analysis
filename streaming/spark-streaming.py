@@ -10,7 +10,7 @@ client = InfluxDBClient(host='localhost', port=8086, database='flight', username
 client.switch_database('flight')
 
 cluster_seeds = ['localhost:9042', 'localhost:9043']
-# initialize the SparkSession
+# Khởi tạo sparksession để thực hiện biến đổi dữ liệu
 
 spark = SparkSession \
     .builder \
@@ -20,7 +20,7 @@ spark = SparkSession \
     .config("spark.cassandra.auth.password", "cassandra") \
     .getOrCreate()
 
-# DF that cyclically reads events from Kafka
+# Đọc dữ liệu topic live-data từ kafka
 df_kafka = spark \
     .readStream \
     .format("kafka") \
@@ -29,9 +29,9 @@ df_kafka = spark \
     .option("startingOffsets", "earliest") \
     .option("failOnDataLoss", "false") \
     .load()
-
+# chuyển dữ liệu thành string để biến đổi
 df = df_kafka.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-
+# lấy thông tin các khóa từ bản ghi trong kafka 
 df = df.select(
     get_json_object(df.value, '$.FL_DATE').alias('FL_DATE'),
     get_json_object(df.value, '$.OP_UNIQUE_CARRIER').alias('OP_UNIQUE_CARRIER'),
@@ -54,7 +54,7 @@ df = df.select(
     get_json_object(df.value, '$.SECURITY_DELAY').alias('SECURITY_DELAY').cast("int"),
     get_json_object(df.value, '$.LATE_AIRCRAFT_DELAY').alias('LATE_AIRCRAFT_DELAY').cast("int")
 )
-
+# Tính thời gian bay dự kiến, thời gian đến dự kiến, tổng thời gian bay dự kiến
 df = df.withColumnRenamed("OP_UNIQUE_CARRIER", "OP_CARRIER") \
     .withColumn("ACTUAL_ELAPSED_TIME", col("AIR_TIME") + col("TAXI_IN") + col("TAXI_OUT")) \
     .withColumn("CRS_DEP_TIME", col("DEP_TIME") - col("DEP_DELAY")) \
@@ -70,6 +70,7 @@ df = df.withColumnRenamed("OP_UNIQUE_CARRIER", "OP_CARRIER") \
 Delay Analysis per Carrier, per Month
 ========================================================================================
 """
+#Tính thời gian trễ theo tháng của mỗi chuyên bay
 delay_df = df.select("OP_CARRIER", "FL_DATE", "DEP_DELAY", "ARR_DELAY") \
     .drop_duplicates() \
     .withColumn("MONTH", month("FL_DATE")) \
@@ -77,7 +78,7 @@ delay_df = df.select("OP_CARRIER", "FL_DATE", "DEP_DELAY", "ARR_DELAY") \
     .agg(avg("DEP_DELAY").alias("DEP_DELAY"), avg("ARR_DELAY").alias("ARR_DELAY")) \
     .select("OP_CARRIER", "MONTH", "DELAY")
 
-
+# Viết dữ liệu trễ mỗi tháng vào cassdra để sau này làm batch data
 def writing(df, i) :
     df.write \
     .format("org.apache.spark.sql.cassandra") \
@@ -98,7 +99,7 @@ delay_query = delay_df.writeStream \
 Analysis for Grafana
 ========================================================================================
 """
-
+#Thiết lập hàm viết data vào InfluxDB
 def saveToInflux(row):
     timestamp = datetime.now()
     json_body = [
@@ -189,7 +190,7 @@ def saveToInfluxGraph(row):
     ]
     client.write_points(json_body)
 
-
+# lưu các thông tin để tạo đồ thị điểm xuất phát, điểm đến, thời gian bay
 graph_df = df.select("ORIGIN", "DEST", "AIR_TIME") \
     .drop_duplicates() \
     .filter(col("AIR_TIME").isNotNull()) \
@@ -202,7 +203,7 @@ graph_df = df.select("ORIGIN", "DEST", "AIR_TIME") \
 Writing Streaming
 ========================================================================================
 """
-
+#viết dữ liệu vào InfluxDB
 influx_query = df.writeStream \
     .foreach(saveToInflux) \
     .start()
