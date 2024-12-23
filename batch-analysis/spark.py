@@ -3,7 +3,7 @@ from pyspark.sql import SparkSession, Window
 from pyspark.sql.functions import col, month, avg, year, dayofweek, count, when, sum, last_day, next_day, dayofyear, \
     dayofmonth, datediff, row_number, lit, max
 
-
+#Tạo SparkSession và kết nối với cassandra
 cluster_seeds = ['localhost:9042', 'localhost:9043']
 
 spark = SparkSession \
@@ -14,16 +14,12 @@ spark = SparkSession \
     .config("spark.cassandra.auth.password", "cassandra") \
     .getOrCreate()
 
-
+#Đọc dữ liệu từ Hdfs
 df = spark.read.option("header", True).csv("hdfs://localhost:9000/input/flight_data.csv").cache()
 
 df.printSchema()
 
-"""
-========================================================================================
-Delay Analysis per Carrier
-========================================================================================
-"""
+#Trung bình độ trễ theo hãng bay và theo thời gian
 
 delay_total_df = df.select("OP_CARRIER", "DEP_DELAY", "ARR_DELAY") \
     .groupBy("OP_CARRIER") \
@@ -49,11 +45,7 @@ delay_dayofweek_df = df.select("OP_CARRIER", "FL_DATE", "DEP_DELAY", "ARR_DELAY"
     .agg(avg("DEP_DELAY").alias("AVG_DEP_DELAY"), avg("ARR_DELAY").alias("AVG_ARR_DELAY")) \
     .select("OP_CARRIER", "DAY_OF_WEEK", "AVG_DEP_DELAY", "AVG_ARR_DELAY")
 
-"""
-========================================================================================
-Delay Analysis per Source-Dest
-========================================================================================
-"""
+#Trung bình độ trễ theo điểm đi và đến và theo thời gian
 
 delay_total_src_dest_df = df.select("ORIGIN", "DEST", "DEP_DELAY", "ARR_DELAY") \
     .groupBy("ORIGIN", "DEST") \
@@ -79,11 +71,7 @@ delay_dayofweek_src_dest_df = df.select("ORIGIN", "DEST", "FL_DATE", "DEP_DELAY"
     .agg(avg("DEP_DELAY").alias("AVG_DEP_DELAY"), avg("ARR_DELAY").alias("AVG_ARR_DELAY")) \
     .select("ORIGIN", "DEST", "DAY_OF_WEEK", "AVG_DEP_DELAY", "AVG_ARR_DELAY")
 
-"""
-========================================================================================
-Cancellation & Diverted Analysis per Carrier
-========================================================================================
-"""
+#Tỉ lệ hủy chuyến theo hãng bay và theo thời gian
 
 cancellation_diverted_total_df = df.select("OP_CARRIER", "CANCELLED", "DIVERTED") \
     .groupBy("OP_CARRIER") \
@@ -121,11 +109,7 @@ cancellation_diverted_dayofweek_df = df.select("OP_CARRIER", "FL_DATE", "CANCELL
     .select("OP_CARRIER", "DAY_OF_WEEK", "CANC_PERC", "CANC_COUNT", "DIV_PERC", "DIV_COUNT") \
     .orderBy("DAY_OF_WEEK", "OP_CARRIER")
 
-"""
-========================================================================================
-Cancellation & Diverted Analysis per Origin Destination
-========================================================================================
-"""
+#Tỉ lệ hủy chuyến theo  điểm đi và đến và theo thời gian
 
 cancellation_diverted_total_src_dest_df = df.select("ORIGIN", "DEST", "CANCELLED", "DIVERTED") \
     .groupBy("ORIGIN", "DEST") \
@@ -163,11 +147,7 @@ cancellation_diverted_dayofweek_src_dest_df = df.select("ORIGIN", "DEST", "FL_DA
     .select("ORIGIN", "DEST", "DAY_OF_WEEK", "CANC_PERC", "CANC_COUNT", "DIV_PERC", "DIV_COUNT") \
     .orderBy("DAY_OF_WEEK", "ORIGIN", "DEST")
 
-"""
-========================================================================================
-Distance Analysis per Carrier
-========================================================================================
-"""
+#Trung bình khoảng cách bay theo hãng bay và theo thời gian
 
 dist_total_df = df.select("OP_CARRIER", "DISTANCE") \
     .groupBy("OP_CARRIER") \
@@ -197,11 +177,7 @@ dist_dayofweek_df = df.select("OP_CARRIER", "FL_DATE", "DISTANCE") \
     .select("OP_CARRIER", "DAY_OF_WEEK", "TOTAL_DISTANCE") \
     .orderBy("DAY_OF_WEEK", "OP_CARRIER")
 
-"""
-========================================================================================
-Max consec days of Delay Analysis per Carrier
-========================================================================================
-"""
+#Số ngày bị hoãn liên tiếp lớn nhất của từng chuyến bay
 
 max_consec_delay_year_df = df.select("OP_CARRIER", "FL_DATE", "ARR_DELAY") \
     .withColumn("YEAR", year("FL_DATE")) \
@@ -227,11 +203,7 @@ max_consec_delay_year_src_dest_df = df.select("ORIGIN", "DEST", "FL_DATE", "ARR_
     .agg(max(col("GIORNI")).alias("MAX_GIORNI")) \
     .select("ORIGIN", "DEST", "YEAR", "MAX_GIORNI")
 
-"""
-========================================================================================
-Group by Source-Dest and Cancellation Code 
-========================================================================================
-"""
+#Số lượng chuyến bay bị hủy theo từng tuyến bay
 src_dest_canc_code_df = df.select("ORIGIN", "DEST", "FL_DATE", "CANCELLED", "CANCElLATION_CODE") \
     .filter(col("CANCELLED").isNotNull()) \
     .filter(col("CANCELLED") == 1) \
@@ -240,11 +212,7 @@ src_dest_canc_code_df = df.select("ORIGIN", "DEST", "FL_DATE", "CANCELLED", "CAN
     .agg(count(col("CANCELLED")).alias("NUM_CANCELLED")) \
     .select("ORIGIN", "DEST", "YEAR", "CANCELLATION_CODE", "NUM_CANCELLED")
 
-"""
-========================================================================================
-Writing Result to Cassandra
-========================================================================================
-"""
+#Ghi các kết quả vào cassandra
 
 delay_total_df.write \
     .format("org.apache.spark.sql.cassandra") \
@@ -274,9 +242,6 @@ delay_dayofweek_df.write \
     .mode("append") \
     .save()
 
-"""
-========================================================================================
-"""
 
 delay_total_src_dest_df.write \
     .format("org.apache.spark.sql.cassandra") \
@@ -306,9 +271,7 @@ delay_dayofweek_src_dest_df.write \
     .mode("append") \
     .save()
 
-"""
-========================================================================================
-"""
+
 
 cancellation_diverted_total_df.write \
     .format("org.apache.spark.sql.cassandra") \
@@ -338,9 +301,6 @@ cancellation_diverted_dayofweek_df.write \
     .mode("append") \
     .save()
 
-"""
-========================================================================================
-"""
 
 cancellation_diverted_total_src_dest_df.write \
     .format("org.apache.spark.sql.cassandra") \
@@ -370,9 +330,6 @@ cancellation_diverted_dayofweek_src_dest_df.write \
     .mode("append") \
     .save()
 
-"""
-========================================================================================
-"""
 
 dist_total_df.write \
     .format("org.apache.spark.sql.cassandra") \
@@ -402,9 +359,6 @@ dist_dayofweek_df.write \
     .mode("append") \
     .save()
 
-"""
-========================================================================================
-"""
 
 max_consec_delay_year_df.write \
     .format("org.apache.spark.sql.cassandra") \

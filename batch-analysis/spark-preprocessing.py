@@ -5,7 +5,7 @@ from pyspark.sql.functions import col, month, avg, year, dayofweek, count, when,
 
 
 cluster_seeds = ['localhost:9042', 'localhost:9043']
-
+#Tạo sparksession và kết nối với 2 cổng của cassandra
 spark = SparkSession \
     .builder \
     .appName("Flight Batch Analysis") \
@@ -13,7 +13,7 @@ spark = SparkSession \
     .config("spark.cassandra.auth.username", "cassandra") \
     .config("spark.cassandra.auth.password", "cassandra") \
     .getOrCreate()
-
+#Đọc dữ liệu từ hdfs
 df_2009 = spark.read.option("header", True).csv("hdfs://localhost:9000/input/2009.csv")
 df_2010 = spark.read.option("header", True).csv("hdfs://localhost:9000/input/2010.csv")
 df_2011 = spark.read.option("header", True).csv("hdfs://localhost:9000/input/2011.csv")
@@ -25,7 +25,7 @@ df_2016 = spark.read.option("header", True).csv("hdfs://localhost:9000/input/201
 df_2017 = spark.read.option("header", True).csv("hdfs://localhost:9000/input/2017.csv")
 df_2018 = spark.read.option("header", True).csv("hdfs://localhost:9000/input/2018.csv")
 df_2019 = spark.read.option("header", True).csv("hdfs://localhost:9000/input/2019.csv")
-
+#Đưa dữ liệu đã đọc vào cahc và xóa các cột thông tin thiếu
 df_2009 = df_2009.drop("Unnamed: 27").cache()
 df_2010 = df_2010.drop("Unnamed: 27").cache()
 df_2011 = df_2011.drop("Unnamed: 27").cache()
@@ -36,7 +36,7 @@ df_2015 = df_2015.drop("Unnamed: 27").cache()
 df_2016 = df_2016.drop("Unnamed: 27").cache()
 df_2017 = df_2017.drop("Unnamed: 27").cache()
 df_2018 = df_2018.drop("Unnamed: 27").cache()
-
+#Điều chỉnh data năm 2019 để phù hợp với streaming layer
 df_2019 = df_2019.withColumnRenamed("OP_UNIQUE_CARRIER", "OP_CARRIER") \
     .withColumn("ACTUAL_ELAPSED_TIME", col("AIR_TIME") + col("TAXI_IN") + col("TAXI_OUT")) \
     .withColumn("CRS_DEP_TIME", col("DEP_TIME") - col("DEP_DELAY")) \
@@ -45,10 +45,7 @@ df_2019 = df_2019.withColumnRenamed("OP_UNIQUE_CARRIER", "OP_CARRIER") \
     .withColumn("CANCELLED", lit(None)) \
     .withColumn("CANCELLATION_CODE", lit(None)) \
     .withColumn("DIVERTED", lit(None))
-
 df_2019 = df_2019.drop(col("_c20")).cache()
-
-
 print("2009: %d" % len(df_2009.columns))
 print("2010: %d" % len(df_2010.columns))
 print("2011: %d" % len(df_2011.columns))
@@ -61,7 +58,7 @@ print("2017: %d" % len(df_2017.columns))
 print("2018: %d" % len(df_2018.columns))
 print("2019: %d" % len(df_2019.columns))
 
-
+#Gộp các file lại và lưu vào hdfs
 df = df_2009.union(df_2010) \
     .unionByName(df_2011, allowMissingColumns=False) \
     .unionByName(df_2012, allowMissingColumns=False) \
@@ -72,7 +69,6 @@ df = df_2009.union(df_2010) \
     .unionByName(df_2017, allowMissingColumns=False) \
     .unionByName(df_2018, allowMissingColumns=False) \
     .unionByName(df_2019, allowMissingColumns=False)
-
 df = df.dropna(how="all").dropDuplicates()
 df.coalesce(1).write.mode('overwrite').option('header', 'true').csv('hdfs://localhost:9000/input/flight_data.csv')
 
