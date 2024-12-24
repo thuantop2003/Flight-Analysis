@@ -9,7 +9,7 @@ from influxdb import InfluxDBClient, DataFrameClient
 client = InfluxDBClient(host='localhost', port=8086, database='flight', username="user", password="pass")
 client.switch_database('flight')
 
-cluster_seeds = ['localhost:9042', 'localhost:9043']
+cluster_seeds = ['localhost:9042']
 # Khởi tạo sparksession để thực hiện biến đổi dữ liệu
 
 spark = SparkSession \

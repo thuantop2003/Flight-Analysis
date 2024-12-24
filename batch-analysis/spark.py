@@ -4,7 +4,7 @@ from pyspark.sql.functions import col, month, avg, year, dayofweek, count, when,
     dayofmonth, datediff, row_number, lit, max
 
 #Tạo SparkSession và kết nối với cassandra
-cluster_seeds = ['localhost:9042', 'localhost:9043']
+cluster_seeds = ['localhost:9042']
 
 spark = SparkSession \
     .builder \
